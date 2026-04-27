@@ -1,0 +1,113 @@
+name: Phantom Station v2
+concurrency:
+  group: phantom-station
+  cancel-in-progress: true
+'on':
+  workflow_dispatch:
+    inputs:
+      ai_api_url:
+        description: AI API URL (https://xxxx.trycloudflare.com/v1)
+        required: false
+        default: ''
+      password:
+        description: 'Password (default: phantom2024)'
+        required: false
+        default: phantom2024
+env:
+  AI_API_URL: ${{ github.event.inputs.ai_api_url || '' }}
+  CS_PASSWORD: ${{ github.event.inputs.password || 'phantom2024' }}
+jobs:
+  phantom:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    permissions:
+      contents: write
+      actions: write
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+    - name: Git config
+      run: 'git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+        git config user.name "github-actions[bot]"
+
+        git remote set-url origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+
+        '
+    - name: Cai tools
+      run: 'pip install --quiet openai requests 2>/dev/null || true
+
+        curl -fsSL https://code-server.dev/install.sh | sh
+
+        '
+    - name: Cai extensions
+      run: "for ext in ms-python.python eamodio.gitlens esbenp.prettier-vscode humao.rest-client vscode-icons-team.vscode-icons\
+        \ continue.continue; do\n  code-server --install-extension $ext 2>/dev/null || true\ndone\n"
+    - name: Setup workspace
+      run: "mkdir -p ~/workspace/.vscode ~/workspace/.continue\ngit clone \"https://x-access-token:${{ secrets.GITHUB_TOKEN\
+        \ }}@github.com/${{ github.repository }}.git\" ~/workspace/repo 2>/dev/null || true\ncd ~/workspace/repo && git config\
+        \ user.email \"41898282+github-actions[bot]@users.noreply.github.com\" && git config user.name \"github-actions[bot]\"\
+        \ || true\npython3 << 'PYEOF'\nimport os,json\nws=os.path.expanduser('~/workspace')\nai=os.environ.get('AI_API_URL','')\n\
+        os.makedirs(f'{ws}/.vscode',exist_ok=True)\nos.makedirs(f'{ws}/.continue',exist_ok=True)\njson.dump({'editor.fontSize':14,'editor.wordWrap':'on','editor.formatOnSave':True,'terminal.integrated.fontSize':13,'files.autoSave':'afterDelay','files.autoSaveDelay':3000,'workbench.colorTheme':'Default\
+        \ Dark Modern','workbench.iconTheme':'vscode-icons','git.autofetch':True,'git.confirmSync':False},open(f'{ws}/.vscode/settings.json','w'),indent=2)\n\
+        if ai:\n    json.dump({'models':[{'title':'Phantom AI','provider':'openai','model':'qwen2.5-coder-14b','apiBase':ai,'apiKey':'dummy-key'}],'tabAutocompleteModel':{'title':'Phantom\
+        \ AI','provider':'openai','model':'qwen2.5-coder-14b','apiBase':ai,'apiKey':'dummy-key'}},open(f'{ws}/.continue/config.json','w'),indent=2)\n\
+        home=os.path.expanduser('~')\nopen(f'{ws}/push.sh','w').write('#!/bin/bash\\ncd ~/workspace/repo\\ngit add -A\\ngit\
+        \ commit -m \"\U0001F4BB ${1:-update}\" 2>/dev/null||true\\ngit push origin HEAD\\necho Done!\\n')\nos.chmod(f'{ws}/push.sh',0o755)\n\
+        open(f'{home}/autosave.sh','w').write('#!/bin/bash\\nwhile true;do\\n  sleep 300\\n  cd ~/workspace/repo 2>/dev/null||continue\\\
+        n  [ -n \"$(git status --porcelain 2>/dev/null)\" ]&&git add -A&&git commit -m autosave 2>/dev/null&&git push origin\
+        \ HEAD 2>/dev/null\\ndone\\n')\nos.chmod(f'{home}/autosave.sh',0o755)\nopen(f'{ws}/ai.py','w').write(f'from openai\
+        \ import OpenAI\\nimport sys\\nclient=OpenAI(base_url=\"{ai}\",api_key=\"dummy-key\")\\ndef chat(p):\\n    r=client.chat.completions.create(model=\"\
+        qwen2.5-coder-14b\",messages=[{{\"role\":\"user\",\"content\":p}}])\\n    return r.choices[0].message.content\\nif\
+        \ __name__==\"__main__\":\\n    print(chat(\" \".join(sys.argv[1:]) or input(\"Ask: \")))\\n')\nopen(f'{ws}/README.md','w').write(f'#\
+        \ Phantom Workspace\\n\\nAI: {ai}\\nPush: ./push.sh msg\\nAgent: python3 agent.py\\n')\nprint('Setup OK')\nPYEOF\n"
+    - name: Install agent
+      run: "cat > ~/workspace/agent.py << 'AGEOF'\nimport os,sys,re,subprocess,requests\nAI=os.environ.get('AI_API_URL','')\n\
+        WS=os.path.expanduser('~/workspace/repo')\nH=[{'role':'system','content':'You are Phantom, an AI agent with terminal\
+        \ access. Use <run>cmd</run> to run shell commands. Use <write path=\"/path\">content</write> to write files. Workspace:\
+        \ ~/workspace/repo'}]\ndef llm(h):\n    try:\n        r=requests.post(f'{AI}/chat/completions',json={'model':'qwen2.5-coder-14b','messages':h},timeout=60)\n\
+        \        return r.json()['choices'][0]['message']['content']\n    except Exception as e: return f'Error: {e}'\ndef\
+        \ run(cmd):\n    r=subprocess.run(cmd,shell=True,capture_output=True,text=True,timeout=30,cwd=WS)\n    return (r.stdout+r.stderr)[:2000]or'(empty)'\n\
+        def wf(path,content):\n    os.makedirs(os.path.dirname(os.path.expanduser(path)),exist_ok=True)\n    open(os.path.expanduser(path),'w').write(content)\n\
+        \    return f'Written {path}'\nprint('=== PHANTOM AGENT ===\\nType task or exit')\nwhile True:\n    try: t=input('>\
+        \ ').strip()\n    except: break\n    if t in('exit','q'): break\n    if not t: continue\n    H.append({'role':'user','content':t})\n\
+        \    for _ in range(5):\n        resp=llm(H)\n        print(f'\\nPhantom: {resp}\\n')\n        H.append({'role':'assistant','content':resp})\n\
+        \        res=[]\n        for m in re.finditer(r'<run>(.*?)</run>',resp,re.DOTALL):\n            c=m.group(1).strip();print(f'$\
+        \ {c}')\n            o=run(c);print(o);res.append(o)\n        for m in re.finditer(r'<write path=\"([^\"]+)\">(.*?)</write>',resp,re.DOTALL):\n\
+        \            o=wf(m.group(1),m.group(2));print(o);res.append(o)\n        if not res: break\n        H.append({'role':'user','content':'Results:\\\
+        n'+'\\n'.join(res)+'\\nContinue if needed.'})\nAGEOF\nchmod +x ~/workspace/agent.py\n"
+    - name: Khoi dong code-server
+      env:
+        PASSWORD: ${{ env.CS_PASSWORD }}
+      run: 'code-server --bind-addr 0.0.0.0:8080 --auth password --disable-telemetry ~/workspace &
+
+        ~/autosave.sh &
+
+        sleep 8
+
+        '
+    - name: Cloudflare Tunnel
+      run: "curl -sL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared\
+        \ && chmod +x /usr/local/bin/cloudflared\ncloudflared tunnel --url http://localhost:8080 --no-autoupdate --logfile\
+        \ /tmp/cf.log --protocol http2 &\nsleep 20\nTUNNEL_URL=''\nfor i in $(seq 1 30); do\n  TUNNEL_URL=$(grep -o 'https://[a-zA-Z0-9-]*\\\
+        .trycloudflare\\.com' /tmp/cf.log 2>/dev/null | head -1)\n  [ -n \"$TUNNEL_URL\" ] && break\n  echo \"$i/30...\" &&\
+        \ sleep 5\ndone\n[ -z \"$TUNNEL_URL\" ] && exit 1\necho \"TUNNEL_URL=$TUNNEL_URL\" >> $GITHUB_ENV\nprintf 'URL: %s\\\
+        nPassword: %s\\nAI: %s\\nStarted: %s\\n' \"$TUNNEL_URL\" \"$CS_PASSWORD\" \"${AI_API_URL:-(chua set)}\" \"$(date '+%Y-%m-%d\
+        \ %H:%M:%S')\" > remote-link.txt\necho \"LIVE: $TUNNEL_URL | pw: $CS_PASSWORD\"\n"
+    - name: Commit link
+      run: 'git pull --rebase origin HEAD || true
+
+        git add remote-link.txt
+
+        git commit -m "🌐 $TUNNEL_URL" --allow-empty
+
+        git push origin HEAD
+
+        '
+    - name: Giu session
+      run: "for i in $(seq 1 320); do\n  echo \"$i/320 $(date '+%H:%M') | $TUNNEL_URL\"\n  if [ $((i % 10)) -eq 0 ]; then\n\
+        \    git pull --rebase origin HEAD 2>/dev/null || true\n    echo \"$(date)\" > .keepalive && git add .keepalive\n\
+        \    git commit -m \"alive $i\" --allow-empty && git push origin HEAD 2>/dev/null || true\n  fi\n  sleep 60\ndone\n\
+        echo Session ended - please run workflow again manually\n"
